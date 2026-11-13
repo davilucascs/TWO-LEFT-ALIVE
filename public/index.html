@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- MENU PRINCIPAL NOIR + ESQUADRÃO (MÁX. 4 PLAYERS) -->
+  <!-- MENU PRINCIPAL NOIR -->
   <div id="lobby-overlay" class="overlay">
     <canvas id="menu-rain-canvas"></canvas>
 
@@ -21,17 +21,17 @@
       <header class="terminal-header">
         <div>
           <h1>DEAD<span class="red-accent">LINE</span></h1>
-          <p>Elimine as criaturas de cada Ordem e avance pelas portas destrancadas.</p>
+          <p>Elimine as criaturas de cada Ordem, esquive dos ataques e avance pelas portas.</p>
         </div>
         <div id="room-full-banner" class="room-full-alert hidden">
-          SALA LOTADA (MÁXIMO 4 JOGADORES)
+          SALA ONLINE LOTADA (4/4) — DISPONÍVEL PARA JOGAR SOZINHO
         </div>
       </header>
 
-      <!-- PAINEL DE JOGADORES CONECTADOS NO LOBBY (4 SLOTS) -->
+      <!-- PAINEL DO ESQUADRÃO ONLINE (4 SLOTS) -->
       <div class="squad-bar">
         <div class="squad-header">
-          <span>ESQUADRÃO CONECTADO</span>
+          <span>ESQUADRÃO ONLINE (SALA COMPARTILHADA)</span>
           <span id="squad-count" class="squad-counter">1 / 4 JOGADORES</span>
         </div>
         <div id="squad-slots" class="squad-slots"></div>
@@ -120,7 +120,12 @@
 
         <!-- COLUNA DIREITA: ORDENS, MAPA INICIAL & CRIATURAS -->
         <section class="noir-box">
-          <div class="box-title">02 // ORDENS & INFESTAÇÃO</div>
+          <div class="box-title-row">
+            <span class="box-title-inline">02 // ORDENS & INFESTAÇÃO</span>
+            <button type="button" id="btn-unlock-solo-cfg" class="btn-mini-cfg hidden">
+              EDITAR P/ SOLO
+            </button>
+          </div>
           <p id="host-hint" class="host-note">Você controla a meta de Ordens e o cenário inicial.</p>
 
           <div class="split-2">
@@ -200,7 +205,15 @@
         </section>
       </div>
 
-      <button id="btn-join" class="btn-noir-start">CRUZAR A PORTA [ENTRAR NA OPERAÇÃO]</button>
+      <!-- DOIS BOTÕES DE MODO DE JOGO -->
+      <div class="launch-actions">
+        <button id="btn-play-solo" class="btn-noir-secondary">
+          JOGAR SOZINHO [MODO SOLO]
+        </button>
+        <button id="btn-play-online" class="btn-noir-start">
+          JOGAR ONLINE [COOP ATÉ 4]
+        </button>
+      </div>
     </div>
   </div>
 
@@ -219,7 +232,23 @@
           <div class="hp-bar-bg">
             <div id="hp-fill" class="hp-bar-fill"></div>
           </div>
-          <div id="reload-badge" class="reload-tag hidden">RECARREGANDO...</div>
+
+          <!-- Barra de Recarga da Esquiva (Dash) -->
+          <div class="hud-row dash-row">
+            <span>ESQUIVA [SHIFT]</span>
+            <span id="dash-status-text">PRONTA</span>
+          </div>
+          <div class="dash-bar-bg">
+            <div id="dash-fill" class="dash-bar-fill"></div>
+          </div>
+
+          <!-- Indicador de Recarga da Arma -->
+          <div id="reload-box" class="reload-box hidden">
+            <div class="reload-label">RECARREGANDO...</div>
+            <div class="reload-bar-bg">
+              <div id="reload-fill" class="reload-bar-fill"></div>
+            </div>
+          </div>
         </div>
 
         <div class="hud-panel center-panel">
@@ -236,13 +265,13 @@
 
       <div id="center-banner" class="center-banner hidden"></div>
 
-      <!-- Prompt de interação quando perto da porta destrancada -->
       <div id="door-prompt" class="door-prompt hidden">
         PRESSIONE <b>[E]</b> PARA ENTRAR NA PORTA E AVANÇAR DE SETOR
       </div>
 
       <div class="hud-controls">
         <span>[WASD] MOVER</span>
+        <span>[SHIFT/ESPAÇO] ESQUIVAR</span>
         <span>[MOUSE] ATIRAR</span>
         <span>[R] RECARREGAR</span>
         <span>[F] GOLPE</span>

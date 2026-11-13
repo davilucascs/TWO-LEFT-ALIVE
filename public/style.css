@@ -112,9 +112,9 @@ body {
   background: #3a0c0c;
   border: 1px solid #ff1e1e;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: bold;
-  padding: 8px 12px;
+  padding: 7px 10px;
   letter-spacing: 1px;
 }
 
@@ -150,7 +150,7 @@ body {
   background: #121212;
   border: 1px solid #2c2c2c;
   padding: 7px 9px;
-  min-height: 54px;
+  min-height: 52px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -227,6 +227,37 @@ body {
   border-bottom: 1px solid #222;
   padding-bottom: 6px;
   margin-bottom: 9px;
+}
+
+.box-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #222;
+  padding-bottom: 6px;
+  margin-bottom: 9px;
+}
+
+.box-title-inline {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  color: #d4d4d4;
+}
+
+.btn-mini-cfg {
+  background: #1a1a1a;
+  border: 1px solid #555;
+  color: #f0f0f0;
+  font-family: inherit;
+  font-size: 9px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.btn-mini-cfg:hover {
+  border-color: #ff1e1e;
+  color: #ff4d4d;
 }
 
 .host-note {
@@ -338,27 +369,58 @@ input:disabled {
   color: #777777;
 }
 
+/* --- BOTÕES DE LANÇAMENTO (SOZINHO VS ONLINE) --- */
+.launch-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.btn-noir-secondary {
+  width: 100%;
+  padding: 12px;
+  background: #141414;
+  color: #f0f0f0;
+  border: 2px solid #555555;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.btn-noir-secondary:hover {
+  background: #222222;
+  border-color: #ffffff;
+}
+
 .btn-noir-start {
   width: 100%;
-  padding: 11px;
+  padding: 12px;
   background: #e6e6e6;
   color: #080808;
   border: 2px solid #ffffff;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: bold;
-  letter-spacing: 2px;
+  letter-spacing: 1.5px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.btn-noir-start:hover {
+.btn-noir-start:hover:not(:disabled) {
   background: #ff1e1e;
   border-color: #ff1e1e;
   color: #ffffff;
 }
 
-/* --- ARENA TELA CHEIA (100% VIEWPORT) --- */
+.btn-noir-start:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- ARENA TELA CHEIA --- */
 #game-wrapper {
   position: fixed;
   inset: 0;
@@ -398,13 +460,13 @@ input:disabled {
 .hud-panel {
   background: rgba(8, 8, 8, 0.85);
   border: 1px solid #333;
-  padding: 7px 12px;
-  min-width: 185px;
+  padding: 8px 12px;
+  min-width: 195px;
 }
 
 .center-panel {
   text-align: center;
-  min-width: 240px;
+  min-width: 245px;
 }
 
 .sector-tag {
@@ -435,6 +497,12 @@ input:disabled {
   margin-bottom: 4px;
 }
 
+.dash-row {
+  margin-top: 7px;
+  font-size: 10px;
+  color: #999;
+}
+
 .hp-bar-bg {
   width: 100%;
   height: 7px;
@@ -448,11 +516,40 @@ input:disabled {
   transition: width 0.12s, background 0.2s;
 }
 
-.reload-tag {
-  margin-top: 4px;
+.dash-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: #1b1b1b;
+}
+
+.dash-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: #77c4d3;
+  transition: width 0.08s;
+}
+
+.reload-box {
+  margin-top: 7px;
+}
+
+.reload-label {
   font-size: 10px;
   color: #ff3333;
   letter-spacing: 1px;
+  margin-bottom: 3px;
+}
+
+.reload-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: #222;
+}
+
+.reload-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: #ff3333;
 }
 
 .hud-actions {
@@ -514,8 +611,9 @@ input:disabled {
   bottom: 14px;
   left: 16px;
   display: flex;
-  gap: 12px;
-  font-size: 11px;
+  flex-wrap: wrap;
+  gap: 11px;
+  font-size: 10px;
   color: #8c8c8c;
   background: rgba(5, 5, 5, 0.82);
   border: 1px solid #222;
@@ -634,7 +732,8 @@ input:disabled {
 }
 
 @media (max-width: 780px) {
-  .terminal-body {
+  .terminal-body,
+  .launch-actions {
     grid-template-columns: 1fr;
   }
   .squad-slots {

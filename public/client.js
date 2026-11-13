@@ -26,15 +26,20 @@ const countSelect = document.getElementById('count-multiplier');
 const speedSelect = document.getElementById('speed-multiplier');
 const hostBadge = document.getElementById('host-badge');
 const hostHint = document.getElementById('host-hint');
+const btnUnlockSoloCfg = document.getElementById('btn-unlock-solo-cfg');
 const squadSlotsEl = document.getElementById('squad-slots');
 const squadCountEl = document.getElementById('squad-count');
 const roomFullBanner = document.getElementById('room-full-banner');
-const btnJoin = document.getElementById('btn-join');
+const btnPlaySolo = document.getElementById('btn-play-solo');
+const btnPlayOnline = document.getElementById('btn-play-online');
 
 // HUD & Overlays
 const hpFill = document.getElementById('hp-fill');
 const hpText = document.getElementById('hp-text');
-const reloadBadge = document.getElementById('reload-badge');
+const dashStatusText = document.getElementById('dash-status-text');
+const dashFill = document.getElementById('dash-fill');
+const reloadBox = document.getElementById('reload-box');
+const reloadFill = document.getElementById('reload-fill');
 const sectorLabel = document.getElementById('sector-label');
 const waveLabel = document.getElementById('wave-label');
 const enemiesLeft = document.getElementById('enemies-left');
@@ -54,8 +59,10 @@ const btnFullscreen = document.getElementById('btn-fullscreen');
 // Estado local
 let myId = null;
 let isHost = false;
+let soloOverrideUnlocked = false;
 let joined = false;
 let serverState = {
+  isSolo: false,
   map: 'rain_ruins',
   mapName: 'SETOR 01 // RUÍNAS SOB TEMPESTADE',
   doorX: 411,
@@ -75,6 +82,8 @@ let tracers = [];
 let muzzleFlashes = [];
 let slashArcs = [];
 let dustPuffs = [];
+let dashGhosts = [];
+let magDrops = [];
 let shakeAmount = 0;
 let lightningFlash = 0;
 let bannerTimeout = null;
@@ -176,6 +185,35 @@ class NoirAudio {
     noise.start(now);
   }
 
+  playDash() {
+    if (!this.ctx || this.muted) return;
+    const now = this.ctx.currentTime;
+    const duration = 0.18;
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufferSize) * Math.PI);
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(320, now);
+    filter.frequency.exponentialRampToValueAtTime(980, now + duration);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.26, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start(now);
+  }
+
   playBladeSlash() {
     if (!this.ctx || this.muted) return;
     const now = this.ctx.currentTime;
@@ -243,11 +281,11 @@ class NoirAudio {
   playReload() {
     if (!this.ctx || this.muted) return;
     const now = this.ctx.currentTime;
-    [0, 0.2].forEach((offset, i) => {
+    [0, 0.28, 0.65].forEach((offset, i) => {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = 'square';
-      osc.frequency.setValueAtTime(i === 0 ? 640 : 1080, now + offset);
+      osc.frequency.setValueAtTime(i === 0 ? 520 : i === 1 ? 760 : 1140, now + offset);
       gain.gain.setValueAtTime(0.08, now + offset);
       gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.06);
       osc.connect(gain);
@@ -308,14 +346,17 @@ function toggleFullscreen() {
   }
 }
 
-btnFullscreen.addEventListener('click', toggleFullscreen);
+btnFullscreen.addEventListener('click', () => {
+  btnFullscreen.blur();
+  toggleFullscreen();
+});
 
 document.addEventListener('fullscreenchange', () => {
   btnFullscreen.textContent = document.fullscreenElement ? 'SAIR TELA CHEIA' : 'TELA CHEIA';
 });
 
 // ============================================================================
-// PIXEL-ART: ARMAS & PERSONAGENS
+// PIXEL-ART: ARMAS, PERSONAGENS & ANIMAÇÃO DE RECARREGAMENTO
 // ============================================================================
 const WEAPON_LABELS = {
   pistol: 'PISTOLA 9MM',
@@ -375,8 +416,9 @@ function drawPixelWeapon(targetCtx, weapon, x, y, scale = 1) {
   targetCtx.restore();
 }
 
-function drawNoirSurvivor(targetCtx, p, time, isPreview = false) {
+function drawNoirSurvivor(targetCtx, p, time, isPreview = false, ghostAlpha = 1) {
   targetCtx.save();
+  targetCtx.globalAlpha = ghostAlpha;
   targetCtx.translate(Math.round(p.x), Math.round(p.y));
 
   if (p.hp <= 0) {
@@ -392,14 +434,19 @@ function drawNoirSurvivor(targetCtx, p, time, isPreview = false) {
     return;
   }
 
-  const stride = p.moving ? Math.round(Math.sin(time * 16) * 3) : 0;
-  const breath = !p.moving ? Math.round(Math.sin(time * 3)) : 0;
+  const stride = p.dashing ? 5 : p.moving ? Math.round(Math.sin(time * 16) * 3) : 0;
+  const breath = !p.moving && !p.dashing ? Math.round(Math.sin(time * 3)) : 0;
+
+  // Inclinação aerodinâmica durante a esquiva (Dash)
+  if (p.dashing) {
+    targetCtx.rotate(p.facing * 0.24);
+  }
 
   targetCtx.save();
   targetCtx.scale(p.facing, 1);
 
   // Pernas
-  targetCtx.fillStyle = '#181818';
+  targetCtx.fillStyle = p.dashing ? '#555555' : '#181818';
   targetCtx.fillRect(-3 + stride, -11, 2, 11);
   targetCtx.fillRect(1 - stride, -11, 2, 11);
 
@@ -409,11 +456,11 @@ function drawNoirSurvivor(targetCtx, p, time, isPreview = false) {
     targetCtx.beginPath();
     targetCtx.moveTo(-4, -22 + breath);
     targetCtx.lineTo(4, -22 + breath);
-    targetCtx.lineTo(6 - stride * 0.5, -3);
-    targetCtx.lineTo(-6 - stride * 0.5, -3);
+    targetCtx.lineTo(6 - stride * 0.6, -3);
+    targetCtx.lineTo(-6 - stride * 0.6, -3);
     targetCtx.closePath();
     targetCtx.fill();
-    targetCtx.strokeStyle = '#333333';
+    targetCtx.strokeStyle = p.dashing ? '#999999' : '#333333';
     targetCtx.lineWidth = 1;
     targetCtx.stroke();
   } else if (p.outfit === 'hood') {
@@ -445,12 +492,33 @@ function drawNoirSurvivor(targetCtx, p, time, isPreview = false) {
 
   targetCtx.restore();
 
-  // Braço e Arma
+  // Braço e Arma (com animação completa de recarregamento!)
   targetCtx.save();
   const recoilOffset = (p.recoil || 0) * -2.5;
   targetCtx.translate(Math.cos(p.aimAngle) * recoilOffset, -17 + breath + Math.sin(p.aimAngle) * recoilOffset);
 
-  if (p.weapon === 'katana') {
+  if (p.reloading) {
+    // Animação de recarga: levanta a arma para cima/peito, insere pente e engatilha
+    const prog = p.reloadProgress || 0;
+    const tiltUp = -0.82 * p.facing;
+    const cockMotion = prog > 0.72 ? Math.sin(((prog - 0.72) / 0.28) * Math.PI) * -3 : 0;
+
+    targetCtx.scale(p.facing, 1);
+    targetCtx.rotate(-0.78);
+    targetCtx.translate(cockMotion, -1);
+
+    // Braço de apoio
+    targetCtx.fillStyle = '#8c8c8c';
+    targetCtx.fillRect(0, -1, 7, 2);
+    drawPixelWeapon(targetCtx, p.weapon, 7, 0, 1);
+
+    // Mão esquerda inserindo carregador na metade da animação
+    if (prog < 0.7) {
+      const handY = Math.round(Math.sin((prog / 0.7) * Math.PI) * -4) + 5;
+      targetCtx.fillStyle = '#d4d4d4';
+      targetCtx.fillRect(5, handY, 2, 3);
+    }
+  } else if (p.weapon === 'katana') {
     targetCtx.rotate(p.aimAngle - 0.55);
     drawPixelWeapon(targetCtx, 'katana', 3, 0, 1);
   } else {
@@ -462,11 +530,21 @@ function drawNoirSurvivor(targetCtx, p, time, isPreview = false) {
   }
   targetCtx.restore();
 
-  if (!isPreview) {
-    targetCtx.font = '7px monospace';
-    targetCtx.textAlign = 'center';
-    targetCtx.fillStyle = p.id === myId ? '#ffffff' : '#888888';
-    targetCtx.fillText(p.name, 0, -34);
+  // Nome ou Barra de Recarga acima da cabeça
+  if (!isPreview && ghostAlpha === 1) {
+    if (p.reloading) {
+      const barW = 20;
+      const prog = Math.max(0, Math.min(1, p.reloadProgress || 0));
+      targetCtx.fillStyle = '#050505';
+      targetCtx.fillRect(-barW / 2, -37, barW, 3);
+      targetCtx.fillStyle = '#ff1e1e';
+      targetCtx.fillRect(-barW / 2, -37, Math.round(barW * prog), 3);
+    } else {
+      targetCtx.font = '7px monospace';
+      targetCtx.textAlign = 'center';
+      targetCtx.fillStyle = p.id === myId ? '#ffffff' : '#888888';
+      targetCtx.fillText(p.name, 0, -34);
+    }
   }
 
   targetCtx.restore();
@@ -545,8 +623,8 @@ function sendLobbyPreviewUpdate() {
   el.addEventListener('change', sendLobbyPreviewUpdate);
 });
 
-function applyHostPermissions(hostStatus) {
-  isHost = hostStatus;
+function refreshSettingsLockState() {
+  const canEdit = isHost || soloOverrideUnlocked;
   [
     mapSelect,
     totalOrdersSelect,
@@ -557,26 +635,37 @@ function applyHostPermissions(hostStatus) {
     countSelect,
     speedSelect
   ].forEach((el) => {
-    el.disabled = !isHost;
+    el.disabled = !canEdit;
   });
 
   if (isHost) {
     hostBadge.textContent = 'LÍDER DA SALA';
     hostBadge.classList.remove('guest');
     hostHint.textContent = 'Você controla a meta de Ordens e o cenário inicial.';
+    btnUnlockSoloCfg.classList.add('hidden');
+  } else if (soloOverrideUnlocked) {
+    hostBadge.textContent = 'CONFIG. SOLO';
+    hostBadge.classList.remove('guest');
+    hostHint.textContent = 'Editando parâmetros para sua partida Sozinho.';
+    btnUnlockSoloCfg.classList.add('hidden');
   } else {
     hostBadge.textContent = 'CONVIDADO';
     hostBadge.classList.add('guest');
-    hostHint.textContent = 'Aguardando configuração do líder da sala.';
+    hostHint.textContent = 'Aguardando líder online (ou clique ao lado para configurar Solo).';
+    btnUnlockSoloCfg.classList.remove('hidden');
   }
 }
 
-function emitSettingsChange() {
-  if (!isHost) return;
+btnUnlockSoloCfg.addEventListener('click', () => {
+  soloOverrideUnlocked = true;
+  refreshSettingsLockState();
+});
+
+function collectCurrentSettingsFromUI() {
   if (!walkerCheck.checked && !crawlerCheck.checked && !sprinterCheck.checked && !reaperCheck.checked) {
     walkerCheck.checked = true;
   }
-  socket.emit('updateSettings', {
+  return {
     map: mapSelect.value,
     totalOrders: parseInt(totalOrdersSelect.value, 10),
     enableWalker: walkerCheck.checked,
@@ -585,7 +674,12 @@ function emitSettingsChange() {
     enableReaper: reaperCheck.checked,
     countMultiplier: parseFloat(countSelect.value),
     speedMultiplier: parseFloat(speedSelect.value)
-  });
+  };
+}
+
+function emitSettingsChange() {
+  if (!isHost) return;
+  socket.emit('updateSettings', collectCurrentSettingsFromUI());
 }
 
 [
@@ -601,18 +695,26 @@ function emitSettingsChange() {
   el.addEventListener('change', emitSettingsChange);
 });
 
-btnJoin.addEventListener('click', () => {
+function startSelectedMode(mode) {
   sound.init();
+  if (document.activeElement) document.activeElement.blur();
   joined = true;
   lobbyOverlay.classList.add('hidden');
 
   socket.emit('joinGame', {
-    name: nameInput.value,
-    outfit: outfitSelect.value,
-    eyeColor: eyeSelect.value,
-    weapon: getSelectedWeapon()
+    mode,
+    profile: {
+      name: nameInput.value,
+      outfit: outfitSelect.value,
+      eyeColor: eyeSelect.value,
+      weapon: getSelectedWeapon()
+    },
+    settings: collectCurrentSettingsFromUI()
   });
-});
+}
+
+btnPlaySolo.addEventListener('click', () => startSelectedMode('solo'));
+btnPlayOnline.addEventListener('click', () => startSelectedMode('online'));
 
 btnRestart.addEventListener('click', () => {
   gameoverOverlay.classList.add('hidden');
@@ -620,6 +722,7 @@ btnRestart.addEventListener('click', () => {
 });
 
 btnMute.addEventListener('click', () => {
+  btnMute.blur();
   sound.init();
   const muted = sound.toggleMute();
   btnMute.textContent = muted ? 'SOM: OFF' : 'SOM: ON';
@@ -630,14 +733,18 @@ btnMute.addEventListener('click', () => {
 // ============================================================================
 socket.on('roomFull', () => {
   roomFullBanner.classList.remove('hidden');
-  btnJoin.disabled = true;
-  btnJoin.textContent = 'SALA LOTADA (4/4)';
+  btnPlayOnline.disabled = true;
+  btnPlayOnline.textContent = 'ONLINE LOTADO (4/4)';
 });
 
 socket.on('init', (data) => {
   myId = data.id;
+  isHost = data.isHost;
   bloodStains = data.bloodStains || [];
-  applyHostPermissions(data.isHost);
+  if (data.onlineFull) {
+    roomFullBanner.classList.remove('hidden');
+  }
+  refreshSettingsLockState();
   syncSettingsUI(data.settings);
   sendLobbyPreviewUpdate();
 });
@@ -646,8 +753,16 @@ socket.on('lobbyUpdated', (data) => {
   renderSquadSlots(data.players, data.maxPlayers);
 });
 
-socket.on('hostAssigned', (status) => applyHostPermissions(status));
-socket.on('settingsUpdated', (s) => syncSettingsUI(s));
+socket.on('hostAssigned', (status) => {
+  isHost = status;
+  refreshSettingsLockState();
+});
+
+socket.on('settingsUpdated', (s) => {
+  if (!soloOverrideUnlocked) {
+    syncSettingsUI(s);
+  }
+});
 
 function syncSettingsUI(s) {
   if (!s) return;
@@ -685,6 +800,7 @@ socket.on('mapChanged', (data) => {
   bloodStains = [];
   particles = [];
   dustPuffs = [];
+  magDrops = [];
   lightningFlash = 0.25;
   showBanner(`${data.triggeredBy.toUpperCase()} ABRIU A PORTA → ${data.mapName}`);
 });
@@ -700,7 +816,7 @@ socket.on('victory', (data) => {
 socket.on('gameOver', (data) => {
   gameoverBox.classList.remove('victory');
   gameoverTitle.textContent = 'SINAL PERDIDO';
-  gameoverStats.textContent = `O esquadrão caiu na Ordem ${String(data.order).padStart(2, '0')} de ${String(data.totalOrders).padStart(2, '0')}.`;
+  gameoverStats.textContent = `Fim da linha na Ordem ${String(data.order).padStart(2, '0')} de ${String(data.totalOrders).padStart(2, '0')}.`;
   renderScoreboard(data.scoreboard);
   gameoverOverlay.classList.remove('hidden');
 });
@@ -726,6 +842,7 @@ socket.on('gameRestarted', () => {
   bloodStains = [];
   particles = [];
   dustPuffs = [];
+  magDrops = [];
   gameoverOverlay.classList.add('hidden');
   showBanner('NOVA OPERAÇÃO INICIADA');
 });
@@ -733,8 +850,34 @@ socket.on('gameRestarted', () => {
 socket.on('emptyClick', () => sound.playEmptyClick());
 socket.on('enemyAlert', () => sound.playAlertSting());
 
+// Esquiva acionada
+socket.on('playerDashed', (data) => {
+  sound.playDash();
+  for (let i = 0; i < 6; i++) {
+    dustPuffs.push({
+      x: data.x + (Math.random() - 0.5) * 10,
+      y: data.y - Math.random() * 6,
+      vx: -data.dx * (25 + Math.random() * 35),
+      vy: -10 - Math.random() * 18,
+      life: 0.28
+    });
+  }
+});
+
+// Recarregamento iniciado: som + ejeção física do carregador vazio no chão
 socket.on('playerReloading', (data) => {
-  if (data.playerId === myId) sound.playReload();
+  if (data.playerId === myId) {
+    sound.playReload();
+  }
+  magDrops.push({
+    x: data.x + data.facing * 4,
+    y: data.y - 16,
+    vx: -data.facing * (14 + Math.random() * 12),
+    vy: -38,
+    floorY: data.y + 1,
+    isShell: data.weapon === 'shotgun',
+    life: 2.2
+  });
 });
 
 socket.on('shotFired', (data) => {
@@ -825,6 +968,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyA' || e.code === 'ArrowLeft') { if (!keys.left) { keys.left = true; changed = true; } }
   if (e.code === 'KeyD' || e.code === 'ArrowRight') { if (!keys.right) { keys.right = true; changed = true; } }
 
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'Space') {
+    e.preventDefault();
+    socket.emit('dash');
+  }
   if (e.code === 'KeyR') socket.emit('reload');
   if (e.code === 'KeyF') socket.emit('melee', currentAimAngle);
   if (e.code === 'KeyE') socket.emit('interactDoor');
@@ -873,7 +1020,8 @@ function triggerPrimaryAction() {
 }
 
 function updateHud() {
-  sectorLabel.textContent = serverState.mapName || 'SETOR 01';
+  const modePrefix = serverState.isSolo ? '[SOLO] ' : '';
+  sectorLabel.textContent = modePrefix + (serverState.mapName || 'SETOR 01');
   waveLabel.textContent = `ORDEM ${String(serverState.order).padStart(2, '0')} / ${String(serverState.totalOrders).padStart(2, '0')}`;
 
   if (serverState.doorUnlocked) {
@@ -890,11 +1038,32 @@ function updateHud() {
   hpFill.style.background = hpPct > 35 ? '#e6e6e6' : '#ff1e1e';
   hpText.textContent = me.hp > 0 ? `${hpPct}%` : 'ABATIDO';
 
-  reloadBadge.classList.toggle('hidden', !me.reloading);
+  // Barra de Esquiva (Dash)
+  const maxCd = 1.15;
+  const cdRatio = Math.max(0, Math.min(1, 1 - (me.dashCooldown || 0) / maxCd));
+  dashFill.style.width = `${Math.round(cdRatio * 100)}%`;
+  if (me.dashing) {
+    dashStatusText.textContent = 'ESQUIVANDO!';
+    dashFill.style.background = '#ffffff';
+  } else if (cdRatio >= 1) {
+    dashStatusText.textContent = 'PRONTA';
+    dashFill.style.background = '#77c4d3';
+  } else {
+    dashStatusText.textContent = `${(me.dashCooldown || 0).toFixed(1)}s`;
+    dashFill.style.background = '#4a6b73';
+  }
+
+  // Barra de Recarga da Arma
+  if (me.reloading) {
+    reloadBox.classList.remove('hidden');
+    reloadFill.style.width = `${Math.round((me.reloadProgress || 0) * 100)}%`;
+  } else {
+    reloadBox.classList.add('hidden');
+  }
+
   updateWeaponHudIcon(me.weapon);
   ammoCounter.textContent = me.weapon === 'katana' ? '∞ | LÂMINA' : `${me.ammo} | ${me.reserve}`;
 
-  // Exibe prompt de interação [E] se a porta estiver destrancada e o jogador estiver próximo
   const nearDoor =
     serverState.doorUnlocked &&
     me.hp > 0 &&
@@ -919,13 +1088,11 @@ function drawPixelClouds(time) {
 
 function drawDoorIndicator(doorX, doorTopY, time) {
   if (serverState.doorUnlocked) {
-    // Porta destrancada: brilho pulsante e balão [!] branco/vermelho
     const bob = Math.round(Math.sin(time * 8) * 2);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
     ctx.fillRect(doorX - 16, doorTopY + 1, 32, 66);
     drawAlertBubble(doorX, doorTopY - 14 + bob, true);
   } else {
-    // Porta trancada durante a Ordem: cadeado/balão escuro [X]
     drawLockedBubble(doorX, doorTopY - 14);
   }
 }
@@ -935,7 +1102,6 @@ function drawMapEnvironment(mapName, time) {
   ctx.fillRect(0, 0, 550, 310);
 
   if (mapName === 'subway') {
-    // --- MAPA 2: ESTAÇÃO SUBTERRÂNEA ---
     ctx.fillStyle = '#141414';
     ctx.fillRect(0, 42, 550, 174);
 
@@ -951,7 +1117,6 @@ function drawMapEnvironment(mapName, time) {
       ctx.fillRect(x + 2, 42, 4, 174);
     }
 
-    // Luminárias fluorescentes (piscam mais no modo BLACKOUT)
     const flickerThreshold = serverState.modifier === 'BLACKOUT' ? 0.2 : -0.85;
     [140, 275, 410].forEach((lx, idx) => {
       const on = Math.sin(time * 25 + idx * 7) > flickerThreshold;
@@ -970,7 +1135,6 @@ function drawMapEnvironment(mapName, time) {
       }
     });
 
-    // Porta de acesso ao próximo setor (X = 486)
     ctx.fillStyle = '#333333';
     ctx.fillRect(469, 148, 34, 68);
     ctx.strokeStyle = serverState.doorUnlocked ? '#ffffff' : '#555555';
@@ -978,7 +1142,6 @@ function drawMapEnvironment(mapName, time) {
     ctx.strokeRect(470.5, 149.5, 31, 65);
     drawDoorIndicator(486, 148, time);
   } else if (mapName === 'asylum') {
-    // --- MAPA 3: ALA PSIQUIÁTRICA ---
     ctx.fillStyle = '#161616';
     ctx.fillRect(0, 38, 550, 178);
 
@@ -991,7 +1154,6 @@ function drawMapEnvironment(mapName, time) {
       }
     });
 
-    // Porta dupla central (X = 275)
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(250, 148, 50, 68);
     ctx.fillStyle = '#2f2f2f';
@@ -1003,14 +1165,12 @@ function drawMapEnvironment(mapName, time) {
     }
     drawDoorIndicator(275, 148, time);
   } else {
-    // --- MAPA 1: RUÍNAS SOB TEMPESTADE ---
     drawPixelClouds(time);
 
     ctx.fillStyle = '#151515';
     ctx.fillRect(140, 135, 95, 81);
     ctx.fillRect(310, 150, 80, 66);
 
-    // Edifício esquerdo
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 74, 112, 142);
     ctx.fillStyle = '#262626';
@@ -1021,7 +1181,6 @@ function drawMapEnvironment(mapName, time) {
     ctx.fillStyle = '#8c8c8c';
     ctx.fillRect(92, 76, 3, 140);
 
-    // Edifício direito + Porta metálica (X = 411)
     ctx.fillStyle = '#1c1c1c';
     ctx.fillRect(388, 74, 162, 142);
     ctx.fillStyle = '#2a2a2a';
@@ -1039,7 +1198,6 @@ function drawMapEnvironment(mapName, time) {
 
     drawDoorIndicator(411, 148, time);
 
-    // Laje inclinada
     ctx.save();
     ctx.translate(458, 182);
     ctx.rotate(-0.34);
@@ -1047,7 +1205,6 @@ function drawMapEnvironment(mapName, time) {
     ctx.fillRect(-7, -34, 14, 68);
     ctx.restore();
 
-    // Vergalhões
     ctx.fillStyle = '#030303';
     ctx.fillRect(116, 70, 52, 2);
     ctx.fillRect(116, 82, 38, 1);
@@ -1056,13 +1213,11 @@ function drawMapEnvironment(mapName, time) {
     ctx.fillRect(352, 63, 2, 20);
   }
 
-  // Piso caminhável escuro
   ctx.fillStyle = '#151515';
   ctx.fillRect(0, 215, 550, 37);
   ctx.fillStyle = '#292929';
   ctx.fillRect(0, 215, 550, 1);
 
-  // Corte subterrâneo preto sólido
   ctx.fillStyle = '#020202';
   ctx.fillRect(0, 252, 550, 58);
   ctx.fillStyle = '#1c1c1c';
@@ -1091,7 +1246,7 @@ function drawLockedBubble(x, y) {
 }
 
 // ============================================================================
-// RENDERIZAÇÃO DOS MONSTROS (COM AURA ELITE NAS ORDENS AVANÇADAS)
+// RENDERIZAÇÃO DOS MONSTROS
 // ============================================================================
 function drawNoirEnemy(e, time) {
   ctx.save();
@@ -1099,7 +1254,6 @@ function drawNoirEnemy(e, time) {
 
   if (e.isElite) {
     ctx.scale(1.18, 1.18);
-    // Sombra vermelha sob inimigos Elite
     ctx.fillStyle = 'rgba(255, 30, 30, 0.28)';
     ctx.fillRect(-8, -2, 16, 3);
   }
@@ -1297,8 +1451,20 @@ function loop(now) {
         hp: 100
       },
       timeSec,
-      true
+      true,
+      1
     );
+  }
+
+  // Gera rastros fantasmas enquanto qualquer jogador estiver esquivando (Dash)
+  for (const p of serverState.players) {
+    if (p.dashing && p.hp > 0 && Math.random() < 0.75) {
+      dashGhosts.push({
+        snapshot: { ...p, dashing: false },
+        life: 0.22,
+        maxLife: 0.22
+      });
+    }
   }
 
   const me = serverState.players.find((p) => p.id === myId);
@@ -1326,6 +1492,10 @@ function loop(now) {
   if (lightningFlash > 0) lightningFlash = Math.max(0, lightningFlash - dt);
   if (serverState.map === 'asylum' && Math.random() < 0.004) lightningFlash = 0.14;
 
+  for (let i = dashGhosts.length - 1; i >= 0; i--) {
+    dashGhosts[i].life -= dt;
+    if (dashGhosts[i].life <= 0) dashGhosts.splice(i, 1);
+  }
   for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
     muzzleFlashes[i].life -= dt;
     if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
@@ -1345,6 +1515,19 @@ function loop(now) {
     d.y += d.vy * dt;
     d.vy += 65 * dt;
     if (d.life <= 0) dustPuffs.splice(i, 1);
+  }
+  for (let i = magDrops.length - 1; i >= 0; i--) {
+    const m = magDrops[i];
+    m.life -= dt;
+    m.vy += 210 * dt;
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+    if (m.y >= m.floorY) {
+      m.y = m.floorY;
+      m.vy *= -0.35;
+      m.vx *= 0.5;
+    }
+    if (m.life <= 0) magDrops.splice(i, 1);
   }
   for (let i = particles.length - 1; i >= 0; i--) {
     const pt = particles[i];
@@ -1373,7 +1556,19 @@ function loop(now) {
     ctx.fillRect(st.x - Math.floor(st.w / 2), st.y - 1, st.w, st.h);
   }
 
+  // Carregadores ejetados no chão durante a recarga
+  for (const m of magDrops) {
+    ctx.fillStyle = m.isShell ? '#ff3b3b' : '#4a4a4a';
+    ctx.fillRect(Math.round(m.x), Math.round(m.y), m.isShell ? 2 : 3, 2);
+  }
+
   drawPickups(timeSec);
+
+  // Rastros fantasmas da esquiva (Dash)
+  for (const g of dashGhosts) {
+    const alpha = (g.life / g.maxLife) * 0.42;
+    drawNoirSurvivor(ctx, g.snapshot, timeSec, false, alpha);
+  }
 
   const entities = [
     ...serverState.players.map((p) => ({ kind: 'player', y: p.y, data: p })),
@@ -1382,7 +1577,7 @@ function loop(now) {
   entities.sort((a, b) => a.y - b.y);
 
   for (const ent of entities) {
-    if (ent.kind === 'player') drawNoirSurvivor(ctx, ent.data, timeSec, false);
+    if (ent.kind === 'player') drawNoirSurvivor(ctx, ent.data, timeSec, false, 1);
     else drawNoirEnemy(ent.data, timeSec);
   }
 
@@ -1415,7 +1610,6 @@ function loop(now) {
 
   updateAndDrawRain(ctx, 550, 310, 218, 250, dt, serverState.map === 'rain_ruins');
 
-  // Efeitos dinâmicos por Ordem (Apagão ou Alerta Vermelho)
   if (serverState.modifier === 'BLACKOUT') {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
     ctx.fillRect(0, 0, 550, 252);
