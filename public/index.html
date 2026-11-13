@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEADLINE // Sobrevivência Noir 2D Online</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- MENU PRINCIPAL NOIR + ESQUADRÃO (MÁX. 4 PLAYERS) -->
+  <div id="lobby-overlay" class="overlay">
+    <canvas id="menu-rain-canvas"></canvas>
+
+    <div class="noir-terminal">
+      <div class="terminal-topbar">
+        <span class="status-dot"></span>
+        <span>FREQUÊNCIA 104.9 // PROTOCOLO DE PURGA</span>
+        <span id="host-badge" class="role-tag">LÍDER DA SALA</span>
+      </div>
+
+      <header class="terminal-header">
+        <div>
+          <h1>DEAD<span class="red-accent">LINE</span></h1>
+          <p>Elimine as criaturas de cada Ordem e avance pelas portas destrancadas.</p>
+        </div>
+        <div id="room-full-banner" class="room-full-alert hidden">
+          SALA LOTADA (MÁXIMO 4 JOGADORES)
+        </div>
+      </header>
+
+      <!-- PAINEL DE JOGADORES CONECTADOS NO LOBBY (4 SLOTS) -->
+      <div class="squad-bar">
+        <div class="squad-header">
+          <span>ESQUADRÃO CONECTADO</span>
+          <span id="squad-count" class="squad-counter">1 / 4 JOGADORES</span>
+        </div>
+        <div id="squad-slots" class="squad-slots"></div>
+      </div>
+
+      <div class="terminal-body">
+        <!-- COLUNA ESQUERDA: AGENTE & ARSENAL -->
+        <section class="noir-box">
+          <div class="box-title">01 // IDENTIDADE & ARMA</div>
+
+          <div class="preview-stage">
+            <canvas id="preview-canvas" width="120" height="84"></canvas>
+            <div class="preview-meta">
+              <label class="noir-label">
+                CODINOME
+                <input type="text" id="player-name" maxlength="14" value="Sombra" placeholder="Codinome..." />
+              </label>
+
+              <div class="split-2">
+                <label class="noir-label">
+                  TRAJE
+                  <select id="outfit-select">
+                    <option value="coat" selected>Sobretudo Preto</option>
+                    <option value="hood">Capuz Ceifador</option>
+                    <option value="jacket">Jaqueta Cinza</option>
+                    <option value="lab">Jaleco Branco</option>
+                  </select>
+                </label>
+
+                <label class="noir-label">
+                  BRILHO OCULAR
+                  <select id="eye-select">
+                    <option value="#ffffff" selected>Branco Frio</option>
+                    <option value="#ff1e1e">Carmesim</option>
+                    <option value="#ffae00">Âmbar</option>
+                    <option value="#4deeea">Espectral</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="noir-label">ARSENAL INICIAL</div>
+          <div class="weapon-grid">
+            <label class="radio-card">
+              <input type="radio" name="weapon" value="pistol" checked />
+              <div class="card-content">
+                <strong>PISTOLA 9MM</strong>
+                <span>12 balas • Precisa</span>
+              </div>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="weapon" value="shotgun" />
+              <div class="card-content">
+                <strong>ESCOPETA</strong>
+                <span>6 balas • Dispersão</span>
+              </div>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="weapon" value="smg" />
+              <div class="card-content">
+                <strong>SUBMETRALHADORA</strong>
+                <span>28 balas • Automática</span>
+              </div>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="weapon" value="sniper" />
+              <div class="card-content">
+                <strong>RIFLE PRECISÃO</strong>
+                <span>5 balas • Perfurante</span>
+              </div>
+            </label>
+
+            <label class="radio-card full-span">
+              <input type="radio" name="weapon" value="katana" />
+              <div class="card-content">
+                <strong>LÂMINA ESPECTRAL (KATANA)</strong>
+                <span>Corte letal infinito com avanço rápido</span>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <!-- COLUNA DIREITA: ORDENS, MAPA INICIAL & CRIATURAS -->
+        <section class="noir-box">
+          <div class="box-title">02 // ORDENS & INFESTAÇÃO</div>
+          <p id="host-hint" class="host-note">Você controla a meta de Ordens e o cenário inicial.</p>
+
+          <div class="split-2">
+            <label class="noir-label">
+              SETOR INICIAL
+              <select id="map-select">
+                <option value="rain_ruins" selected>01. Ruínas Tempestade</option>
+                <option value="subway">02. Estação Metrô</option>
+                <option value="asylum">03. Ala Psiquiátrica</option>
+              </select>
+            </label>
+
+            <label class="noir-label">
+              META DE ORDENS
+              <select id="total-orders-select">
+                <option value="3">3 Ordens (Curta)</option>
+                <option value="6" selected>6 Ordens (Padrão)</option>
+                <option value="9">9 Ordens (Inferno)</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="noir-label">CRIATURAS ATIVAS</div>
+          <div class="monster-grid">
+            <label class="check-card">
+              <input type="checkbox" id="enable-walker" checked />
+              <div>
+                <strong>ERRANTES</strong>
+                <span>Marcha contínua</span>
+              </div>
+            </label>
+
+            <label class="check-card">
+              <input type="checkbox" id="enable-crawler" checked />
+              <div>
+                <strong>RASTEJADORES</strong>
+                <span>Velozes no chão</span>
+              </div>
+            </label>
+
+            <label class="check-card">
+              <input type="checkbox" id="enable-sprinter" checked />
+              <div>
+                <strong>FRENÉTICOS</strong>
+                <span>Ataque rápido</span>
+              </div>
+            </label>
+
+            <label class="check-card">
+              <input type="checkbox" id="enable-reaper" checked />
+              <div>
+                <strong>CEIFADORES</strong>
+                <span>Alta resistência</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="split-2">
+            <label class="noir-label">
+              DENSIDADE INICIAL
+              <select id="count-multiplier">
+                <option value="0.75">Escassa</option>
+                <option value="1" selected>Padrão</option>
+                <option value="1.5">Infestação</option>
+              </select>
+            </label>
+
+            <label class="noir-label">
+              AGRESSIVIDADE BASE
+              <select id="speed-multiplier">
+                <option value="0.8">Lenta</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.3">Pesadelo</option>
+              </select>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <button id="btn-join" class="btn-noir-start">CRUZAR A PORTA [ENTRAR NA OPERAÇÃO]</button>
+    </div>
+  </div>
+
+  <!-- ARENA TELA CHEIA PIXEL-ART -->
+  <main id="game-wrapper">
+    <div class="canvas-frame">
+      <canvas id="game-canvas" width="550" height="310"></canvas>
+
+      <!-- HUD Superior -->
+      <div class="hud-top">
+        <div class="hud-panel">
+          <div class="hud-row">
+            <span>PULSO</span>
+            <span id="hp-text">100%</span>
+          </div>
+          <div class="hp-bar-bg">
+            <div id="hp-fill" class="hp-bar-fill"></div>
+          </div>
+          <div id="reload-badge" class="reload-tag hidden">RECARREGANDO...</div>
+        </div>
+
+        <div class="hud-panel center-panel">
+          <div id="sector-label" class="sector-tag">SETOR 01 // RUÍNAS</div>
+          <span id="wave-label">ORDEM 01 / 06</span>
+          <small id="enemies-left">00 RESTANTES</small>
+        </div>
+
+        <div class="hud-actions">
+          <button id="btn-mute" class="btn-hud" title="Alternar Som">SOM: ON</button>
+          <button id="btn-fullscreen" class="btn-hud" title="Alternar Tela Cheia">TELA CHEIA</button>
+        </div>
+      </div>
+
+      <div id="center-banner" class="center-banner hidden"></div>
+
+      <!-- Prompt de interação quando perto da porta destrancada -->
+      <div id="door-prompt" class="door-prompt hidden">
+        PRESSIONE <b>[E]</b> PARA ENTRAR NA PORTA E AVANÇAR DE SETOR
+      </div>
+
+      <div class="hud-controls">
+        <span>[WASD] MOVER</span>
+        <span>[MOUSE] ATIRAR</span>
+        <span>[R] RECARREGAR</span>
+        <span>[F] GOLPE</span>
+        <span>[E] PORTA</span>
+      </div>
+
+      <!-- HUD da Arma (Canto Inferior Direito) -->
+      <div class="hud-weapon-box">
+        <canvas id="weapon-hud-canvas" width="64" height="28"></canvas>
+        <div id="weapon-name-hud" class="weapon-title">PISTOLA 9MM</div>
+        <div id="ammo-counter" class="ammo-counter">12 | 48</div>
+      </div>
+
+      <!-- Tela de Fim de Jogo / Vitória -->
+      <div id="gameover-overlay" class="gameover-overlay hidden">
+        <div class="gameover-box">
+          <div id="end-icon" class="alert-icon">!</div>
+          <h2 id="gameover-title">SINAL PERDIDO</h2>
+          <p id="gameover-stats">A equipe caiu na Ordem 01.</p>
+          <div id="scoreboard-list" class="scoreboard"></div>
+          <button id="btn-restart" class="btn-noir-start">REINICIAR OPERAÇÃO</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
